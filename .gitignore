@@ -1,2 +1,10 @@
 # Node.js dependencies
 node_modules/
+
+# Build output
+client/build/
+
+# Environment variables
+.env
+client/.env
+server/.env
