@@ -3,13 +3,15 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import './index.css';
-import API from './api/axios';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/images/marker-shadow.png',
+  iconRetinaUrl:
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/images/marker-icon-2x.png',
+  iconUrl:
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/images/marker-icon.png',
+  shadowUrl:
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/images/marker-shadow.png',
 });
 
 function ChangeView({ center }) {
@@ -17,6 +19,8 @@ function ChangeView({ center }) {
   map.setView(center, 13);
   return null;
 }
+
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 function App() {
   const [symptomsText, setSymptomsText] = useState('');
@@ -33,14 +37,14 @@ function App() {
 
   useEffect(() => {
     if (!navigator.geolocation) {
-      alert('Geolocation not supported, defaulting to NYC');
+      alert('Geolocation not supported, default to NYC');
       setUserLocation({ lat: 40.7128, lng: -74.006 });
       return;
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       () => {
-        alert('Location denied, defaulting to NYC');
+        alert('Location denied, default to NYC');
         setUserLocation({ lat: 40.7128, lng: -74.006 });
       }
     );
@@ -77,7 +81,6 @@ function App() {
         setHospitals([]);
       }
     }
-
     fetchHospitals();
   }, [userLocation]);
 
@@ -107,17 +110,21 @@ function App() {
     }
     setLoading(true);
     try {
-      const { data } = await API.post('/api/chat', {
-        symptomsText,
-        base64Image: selectedImage,
+      const resp = await fetch(`${API_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symptomsText, base64Image: selectedImage }),
       });
-
-      setAiResponse(data.aiResponse);
-      setSessionId(data.sessionId);
-      setImagePreview(data.imageUrl ? API.defaults.baseURL + data.imageUrl : null);
-    } catch (err) {
-      console.error(err);
-      alert(err?.response?.data?.error || 'Server error');
+      const data = await resp.json();
+      if (resp.ok) {
+        setAiResponse(data.aiResponse);
+        setSessionId(data.sessionId);
+        setImagePreview(data.imageUrl ? `${API_BASE}${data.imageUrl}` : null);
+      } else {
+        alert(data.error || 'AI response failed');
+      }
+    } catch (e) {
+      alert('Server error: ' + e.message);
     }
     setLoading(false);
   };
@@ -127,19 +134,15 @@ function App() {
       alert('Submit symptoms first');
       return;
     }
+    const body = { symptomsText, aiResponse, imageUrl: imagePreview, timestamp: new Date().toISOString() };
     try {
-      const body = {
-        symptomsText,
-        aiResponse,
-        imageUrl: imagePreview,
-        timestamp: new Date().toISOString(),
-      };
-
-      const response = await API.post('/api/generate-pdf', body, {
-        responseType: 'blob',
+      const resp = await fetch(`${API_BASE}/api/generate-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       });
-
-      const blob = new Blob([response.data], { type: 'application/pdf' });
+      if (!resp.ok) throw new Error('PDF generation failed');
+      const blob = await resp.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -204,14 +207,7 @@ function App() {
           <label htmlFor="imageUpload" className="upload-label">
             Upload symptom image (optional):
           </label>
-          <input
-            id="imageUpload"
-            type="file"
-            accept="image/*"
-            onChange={handleImageChange}
-            disabled={loading}
-            ref={fileInputRef}
-          />
+          <input id="imageUpload" type="file" accept="image/*" onChange={handleImageChange} disabled={loading} ref={fileInputRef} />
           {imagePreview && <img src={imagePreview} alt="Symptom preview" className="image-preview" />}
 
           <button disabled={loading} onClick={handleSubmit} className="primary-btn">
@@ -221,10 +217,18 @@ function App() {
           {aiResponse && (
             <div className="ai-response">
               <h2>AI-Doctor Advice:</h2>
-              <p><strong>Possible Causes:</strong> {aiResponse.possibleCauses}</p>
-              <p><strong>Risk Level:</strong> {aiResponse.riskLevel}</p>
-              <p><strong>Self-Care Tips:</strong> {aiResponse.selfCareTips}</p>
-              <p><strong>Doctor Advice:</strong> {aiResponse.doctorAdvice}</p>
+              <p>
+                <strong>Possible Causes:</strong> {aiResponse.possibleCauses}
+              </p>
+              <p>
+                <strong>Risk Level:</strong> {aiResponse.riskLevel}
+              </p>
+              <p>
+                <strong>Self-Care Tips:</strong> {aiResponse.selfCareTips}
+              </p>
+              <p>
+                <strong>Doctor Advice:</strong> {aiResponse.doctorAdvice}
+              </p>
               <button onClick={downloadPdf} className="primary-btn">
                 Download Health Report (PDF)
               </button>
@@ -244,6 +248,7 @@ function App() {
         <p><strong>Scrum Master: Aryan Khan(PIET22AD001)</strong></p>
         <p><strong>Members: Gourav Trivedi (PIET22AD020), Harish Geela (PIET22AD021)</strong></p>
       </footer>
+
     </div>
   );
 }
