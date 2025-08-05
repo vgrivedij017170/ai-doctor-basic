@@ -20,7 +20,7 @@ function ChangeView({ center }) {
   return null;
 }
 
-const API_BASE = process.env.REACT_APP_API_URL || 'https://ai-doctor-basic.onrender.com/';
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 function App() {
   const [symptomsText, setSymptomsText] = useState('');
